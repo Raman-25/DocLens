@@ -44,10 +44,10 @@ spring:
 #app configurations
 app:
   rag:
-    chunk-size: 600
-    chunk-overlap: 100
-    top-k: 5
-    similarity-threshold: 0.0
+    chunk-size: 600  #har chunk max ~600 units ka
+    chunk-overlap: 100  # 100 → next chunk pichle chunk ke last 100 units repeat karega — taaki koi sentence/idea beech se kat ke lost na ho jaye
+    top-k: 5          #top-5 chunks
+    similarity-threshold: 0.0  #min score for selection
   cors:
     allowed-origins: "*"
     allowed-methods: GET,POST,PUT,DELETE,OPTIONS
