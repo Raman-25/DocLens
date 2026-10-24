@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/documents")
@@ -38,5 +39,22 @@ public class DocumentController {
                         .timestamp(LocalDateTime.now())
                         .message("Document uploaded successfully ")
                         .build());
+    }
+
+    @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<List<DocumentResponseDto>>> uploadMultiple(
+            @RequestParam("files") List<MultipartFile> files,) {
+
+        List<DocumentResponseDto> responseDtos = documentMetaDataService.uploadMultipleDocuments(files);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        ApiResponse.<List<DocumentResponseDto>>
+                                        builder()
+                                .message("Document uploaded successfully")
+                                .success(true)
+                                .timestamp(LocalDateTime.now())
+                                .data(responseDtos)
+                                .build()
+                );
     }
 }

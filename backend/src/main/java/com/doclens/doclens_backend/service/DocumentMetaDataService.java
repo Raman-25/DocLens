@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -19,14 +20,15 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DocumentMetaDataService {
 
-  private final DocumentMetadataRepository documentMetadataRepository;
-  private final DocumentParserService documentParserService;
+    private final DocumentMetadataRepository documentMetadataRepository;
+    private final DocumentParserService documentParserService;
+    private final DocumentIngestionService documentIngestionService;
 
 
     public DocumentResponseDto uploadAndProcess(MultipartFile file) {
 
-        String fileName = file.getOriginalFilename() !=null ? file.getOriginalFilename() : "document";
-        String contentType = file.getContentType() !=null ? file.getContentType():  "application/octet-stream"; // the generic MIME type meaning "unknown binary data"
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document";
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream"; // the generic MIME type meaning "unknown binary data"
 
         //storing the user detail with document metadata
         DocumentMetadata documentMetadata = DocumentMetadata.builder()
@@ -47,11 +49,9 @@ public class DocumentMetaDataService {
             parsedDocs = documentParserService.parse(file);
 
             //ingest service - convert the praisedFile into chunks
-            chunksCreated = ingestionService.ingest(documentMetadata, parsedDocs); //req the metadata and the praised doc(document) both
-        }
-        catch (
-                DocumentProcessingException e)
-        {
+            chunksCreated = documentIngestionService.ingest(documentMetadata, parsedDocs); //req the metadata and the praised doc(document) both
+        } catch (
+                DocumentProcessingException e) {
             log.info("Document metadata deleting due to fail processing");
             documentMetadataRepository.delete(documentMetadata);
             throw e;
@@ -66,8 +66,15 @@ public class DocumentMetaDataService {
                 .message("Document successfully processed and indexed.")
 //                .userId(user.getId())
                 .build();
+    }
 
+    public List<DocumentResponseDto> uploadMultipleDocuments(List<MultipartFile> files) {
 
-        return null;
+        List<DocumentResponseDto> responseDtos = new ArrayList<>();
+        for(MultipartFile file: files){
+            DocumentResponseDto result = this.uploadAndProcess(file);
+            responseDtos.add(result);
+        }
+        return responseDtos;
     }
 }

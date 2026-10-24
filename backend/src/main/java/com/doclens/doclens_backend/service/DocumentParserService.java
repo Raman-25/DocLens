@@ -1,6 +1,7 @@
 package com.doclens.doclens_backend.service;
 import com.doclens.doclens_backend.exceptions.DocumentProcessingException;
 import com.drew.lang.annotations.Nullable;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
@@ -19,6 +20,7 @@ import java.util.List;
 
 
 @Service
+@RequiredArgsConstructor
 public class DocumentParserService {
 
     private final static Logger log = LoggerFactory.getLogger(DocumentParserService.class);

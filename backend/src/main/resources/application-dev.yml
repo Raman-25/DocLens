@@ -14,19 +14,30 @@ spring:
       hibernate:
         format_sql: true
 
-  #open-ai-configurations
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
   ai:
+    model:
+      chat: openai
+      embedding:
+        text: google-genai
     openai:
       api-key: ${GROQ_API_KEY}
       chat:
         base-url: https://api.groq.com/openai/v1
         api-key: ${GROQ_API_KEY}
-        model: ${GROQ_CHAT_MODEL:llama-3.3-70b-versatile}
-        temperature: 0.2
-      embedding:
-        base-url: https://generativelanguage.googleapis.com/v1beta/openai/
-        api-key: ${GEMINI_API_KEY}
-        model: ${GEMINI_EMBEDDING_MODEL:text-embedding-004}
+        options:
+          model: ${GROQ_CHAT_MODEL:llama-3.3-70b-versatile}
+          temperature: 0.2
+    google:
+      genai:
+        embedding:
+          api-key: ${GEMINI_API_KEY}
+          text:
+            options:
+              model: gemini-embedding-001
+              dimensions: 768
     vectorstore:
       pgvector:
         index-type: HNSW
@@ -35,6 +46,7 @@ spring:
         table-name: vector_store
         schema-name: public
         initialize-schema: true
+
 
   servlet:
     multipart:
