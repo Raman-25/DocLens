@@ -28,7 +28,7 @@ spring:
         base-url: https://api.groq.com/openai/v1
         api-key: ${GROQ_API_KEY}
         options:
-          model: ${GROQ_CHAT_MODEL:llama-3.3-70b-versatile}
+          model: ${GROQ_CHAT_MODEL:openai/gpt-oss-120b}
           temperature: 0.2
     google:
       genai:

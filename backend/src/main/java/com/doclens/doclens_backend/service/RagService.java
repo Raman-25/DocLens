@@ -89,7 +89,7 @@ public class RagService {
 
         return chatClient.prompt()
                 .user(userPrompt)
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID,conversationId))
                 .stream()
                 .content();
 

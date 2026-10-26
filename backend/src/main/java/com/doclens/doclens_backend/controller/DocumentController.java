@@ -1,5 +1,6 @@
 package com.doclens.doclens_backend.controller;
 import com.doclens.doclens_backend.dto.ApiResponse;
+import com.doclens.doclens_backend.dto.DocumentMetadataDto;
 import com.doclens.doclens_backend.dto.DocumentResponseDto;
 import com.doclens.doclens_backend.service.DocumentMetaDataService;
 import lombok.RequiredArgsConstructor;
@@ -7,14 +8,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/documents")
@@ -43,7 +42,7 @@ public class DocumentController {
 
     @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<List<DocumentResponseDto>>> uploadMultiple(
-            @RequestParam("files") List<MultipartFile> files,) {
+            @RequestParam("files") List<MultipartFile> files) {
 
         List<DocumentResponseDto> responseDtos = documentMetaDataService.uploadMultipleDocuments(files);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -57,4 +56,68 @@ public class DocumentController {
                                 .build()
                 );
     }
+
+    // list all uploaded documents
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<DocumentMetadataDto>>> getAllDocuments(){
+        java.util.List<DocumentMetadataDto> documents =documentMetaDataService.getAllDocuments();
+        return ResponseEntity.ok(
+                ApiResponse.<List<DocumentMetadataDto>>
+                                builder()
+                        .message("All documents is here")
+                        .success(true)
+                        .timestamp(LocalDateTime.now())
+                        .data(documents)
+                        .build()
+        );
+    }
+
+//    //    list all uploaded documents of logged in user
+//    @GetMapping("/user")
+//    public ResponseEntity<ApiResponse<List<DocumentMetadataDto>>> getAllDocumentOfLoggedInUser(
+//            Authentication authentication
+//    ){
+//        User user=(User)authentication.getPrincipal();
+//        java.util.List<DocumentMetadataDto> documents =documentService.getAllDocumentsByUser(user);
+//        return ResponseEntity.ok(
+//                ApiResponse.<List<DocumentMetadataDto>>
+//                                builder()
+//                        .message("All documents is here")
+//                        .success(true)
+//                        .timestamp(LocalDateTime.now())
+//                        .data(documents)
+//                        .build()
+//        );
+//    }
+
+
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<DocumentMetadataDto>> getDocumentById(@PathVariable UUID id) {
+        DocumentMetadataDto document = documentMetaDataService.getDocumentById(id);
+        return ResponseEntity.ok(
+                ApiResponse.<DocumentMetadataDto>
+                                builder()
+                        .message("Single document is here")
+                        .success(true)
+                        .timestamp(LocalDateTime.now())
+                        .data(document)
+                        .build()
+        );
+    }
+
+    @DeleteMapping("/{id}") //make sure to delete the data from the vector store also
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable UUID id) {
+        documentMetaDataService.deleteDocument(id);
+        return ResponseEntity.ok(
+                ApiResponse.<Void>
+                                builder()
+                        .message("Document deleted successfully")
+                        .success(true)
+                        .timestamp(LocalDateTime.now())
+                        .data(null)
+                        .build()
+        );
+    }
+
 }

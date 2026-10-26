@@ -2,6 +2,7 @@ package com.doclens.doclens_backend.configs;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
+import org.modelmapper.ModelMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.context.annotation.Bean;
@@ -38,5 +39,10 @@ public class ProjectConfig {
                         .contact(new Contact()
                                 .name("DocLens")
                                 .email("ramany5979@gmail.com")));
+    }
+
+    @Bean
+    public ModelMapper modelMapper() {
+        return new ModelMapper();
     }
 }
