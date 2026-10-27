@@ -22,14 +22,20 @@ spring:
       chat: openai
       embedding:
         text: google-genai
+    chat:                        #This creates the SPRING_AI_CHAT_MEMORY table on startup
+        memory:
+          repository:
+            jdbc:
+              initialize-schema: always
     openai:
       api-key: ${GROQ_API_KEY}
       chat:
         base-url: https://api.groq.com/openai/v1
         api-key: ${GROQ_API_KEY}
         options:
-          model: ${GROQ_CHAT_MODEL:openai/gpt-oss-120b}
+          model: ${GROQ_CHAT_MODEL:qwen/qwen3.8-27b}
           temperature: 0.2
+          max-tokens: 500
     google:
       genai:
         embedding:

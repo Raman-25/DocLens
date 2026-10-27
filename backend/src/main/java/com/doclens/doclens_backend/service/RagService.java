@@ -36,6 +36,11 @@ public class RagService {
 
         long startTime = System.currentTimeMillis();
 
+        String question = request.getQuestion();
+        String conversationId = request.getConversationId() != null
+                ? request.getConversationId()
+                : UUID.randomUUID().toString();
+
         log.info("Processing query: '{}', scoped documentId: {}", request.getQuestion(), request.getDocumentId());
 
         List<Document> similarDocuments = this.retrieveRelevantDocuments(
@@ -51,10 +56,12 @@ public class RagService {
 
         String contextText = buildContextString(similarDocuments);
 
-        String prompt = buildPrompt(request.getQuestion(),contextText);
+//        String prompt = buildPrompt(request.getQuestion(),contextText);
 
         String answer = this.chatClient.prompt()
-                .user(prompt)
+                .system(s -> s.param("doc_context", contextText))   //set the system message for this call
+                .user(question)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))  //set the convo id for the chat memory
                 .call()
                 .content();
 
@@ -74,6 +81,7 @@ public class RagService {
     public Flux<String> streamQuestionAnswer(ChatRequestDto requestDto) {
         log.info("Streaming query: '{}'", requestDto.getQuestion());
 
+        String question = requestDto.getQuestion();
         String conversationId = requestDto.getConversationId() != null
                 ? requestDto.getConversationId()
                 : UUID.randomUUID().toString();
@@ -85,10 +93,11 @@ public class RagService {
                 requestDto.getMinSimilarity());
 
         String contextText = buildContextString(relevantDocuments);
-        String userPrompt = buildPrompt(requestDto.getQuestion(), contextText);
+//        String userPrompt = buildPrompt(requestDto.getQuestion(), contextText);
 
         return chatClient.prompt()
-                .user(userPrompt)
+                .system(s -> s.param("doc_context", contextText))
+                .user(question)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID,conversationId))
                 .stream()
                 .content();
@@ -121,29 +130,29 @@ public class RagService {
     }
 
 
-    private String buildPrompt(@NotBlank(message = "Question cannot be empty") String question, String contextText) {
-
-        //String.format fills the first %s with contextText
-        if (contextText != null && !contextText.isBlank()) {
-            return String.format("""
-                       Document Context:
-                       ---------------------
-                       %s
-                       ---------------------
-                       User Message / Question: %s
-                       Instructions:
-                       - If the user's question relates to the document context above, prioritize answering using that context and reference key sections.
-                       - If the user is asking a general question, greeting, or discussing topics beyond the document context, respond helpfully and conversationally using your general knowledge while weaving in relevant document context if applicable
-                """, contextText, question);
-        } else {
-            return String.format("""
-                   User Message / Question:
-                   %s
-                   Instructions:
-                      - Respond helpfully, accurately, and conversationally to the user's message using your broad knowledge base.
-                """, question);
-        }
-    }
+//    private String buildPrompt(@NotBlank(message = "Question cannot be empty") String question, String contextText) {
+//
+//        //String.format fills the first %s with contextText
+//        if (contextText != null && !contextText.isBlank()) {
+//            return String.format("""
+//                       Document Context:
+//                       ---------------------
+//                       %s
+//                       ---------------------
+//                       User Message / Question: %s
+//                       Instructions:
+//                       - If the user's question relates to the document context above, prioritize answering using that context and reference key sections.
+//                       - If the user is asking a general question, greeting, or discussing topics beyond the document context, respond helpfully and conversationally using your general knowledge while weaving in relevant document context if applicable
+//                """, contextText, question);
+//        } else {
+//            return String.format("""
+//                   User Message / Question:
+//                   %s
+//                   Instructions:
+//                      - Respond helpfully, accurately, and conversationally to the user's message using your broad knowledge base.
+//                """, question);
+//        }
+//    }
 
     private String buildContextString(List<Document> similarDocuments) {
         if (similarDocuments == null || similarDocuments.isEmpty()) {

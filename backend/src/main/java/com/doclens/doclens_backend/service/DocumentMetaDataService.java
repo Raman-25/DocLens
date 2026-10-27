@@ -80,7 +80,6 @@ public class DocumentMetaDataService {
                 .chunksCreated(chunksCreated)
                 .status(documentMetadata.getStatus())
                 .message("Document successfully processed and indexed.")
-//                .userId(user.getId())
                 .build();
     }
 
