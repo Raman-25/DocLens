@@ -15,17 +15,6 @@ import org.springframework.context.annotation.Configuration;
 public class AppProperties {
 
     private RagProperties rag = new RagProperties();
-    private CorsProperties cors = new CorsProperties();
-
-    @Getter
-    @Setter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class CorsProperties {
-        private String allowedOrigins = "*";
-        private String allowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
-        private String allowedHeaders = "*";
-    }
 
     @Getter
     @Setter

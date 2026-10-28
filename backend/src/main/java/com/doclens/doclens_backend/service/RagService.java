@@ -100,7 +100,8 @@ public class RagService {
                 .user(question)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID,conversationId))
                 .stream()
-                .content();
+                .content()
+                .concatWith(Flux.just("[DONE]"));
 
        // Flux<String> = a stream of many string pieces arriving over time (Spring WebFlux)
        //MessageChatMemoryAdvisor loads past messages and saves new ones, but needs to know which conversation
