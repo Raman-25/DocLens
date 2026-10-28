@@ -14,8 +14,6 @@ import org.modelmapper.ModelMapper;
 import org.springframework.ai.document.Document;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -86,9 +84,20 @@ public class DocumentMetaDataService {
     public List<DocumentResponseDto> uploadMultipleDocuments(List<MultipartFile> files) {
 
         List<DocumentResponseDto> responseDtos = new ArrayList<>();
-        for(MultipartFile file: files){
-            DocumentResponseDto result = this.uploadAndProcess(file);
-            responseDtos.add(result);
+        for (MultipartFile file : files) {  //here we are processing each file and catching the exception for each
+            try {
+                DocumentResponseDto result = this.uploadAndProcess(file);
+                responseDtos.add(result);
+            } catch (Exception e) {
+                log.warn("Failed to process file '{}': {}", file.getOriginalFilename(), e.getMessage());
+                responseDtos.add(DocumentResponseDto.builder()
+                        .fileName(file.getOriginalFilename())
+                        .fileSize(file.getSize())
+                        .status(DocumentStatus.FAILED)
+                        .chunksCreated(0)
+                        .message(e.getMessage() != null ? e.getMessage() : "Failed to process document")
+                        .build());
+            }
         }
         return responseDtos;
     }

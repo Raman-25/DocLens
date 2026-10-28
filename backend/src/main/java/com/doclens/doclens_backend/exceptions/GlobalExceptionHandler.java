@@ -47,9 +47,14 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
-//    @ExceptionHandler(DocumentProcessingException.class)
-//    public ResponseEntity<ApiResponse<Object>> handleProcessingError(DocumentProcessingException ex) {
-//    }
+    @ExceptionHandler(DocumentProcessingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDocumentProcessing(DocumentProcessingException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.<Void>builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .build());
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(MethodArgumentNotValidException ex) {
@@ -89,7 +94,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleGeneric(Exception ex) {
         logger.error("Unexpected error occurred: ", ex);
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(
                         ApiResponse.builder()
                                 .success(false)

@@ -69,7 +69,7 @@ public class RagService {
 
         return ChatResponseDto.builder()
                 .answer(answer)
-                .conversationId(request.getConversationId() != null ? request.getConversationId() : UUID.randomUUID().toString())
+                .conversationId(conversationId)
                 .citations(citationDtos)
                 .responseTimeMs(responseTime)
                 .build();
@@ -224,7 +224,7 @@ public class RagService {
             pageNumber = n.intValue();
         }
         Double score = null;
-        if (meta.get("distance") instanceof Number n) {
+        if (meta.get("distance") instanceof Number n) {  // to get the score the how much it realted in percentage
             score = 1.0 - n.doubleValue();
         }
 

@@ -64,9 +64,5 @@ app:
   rag:
     chunk-size: 600  #har chunk max ~600 units ka
     chunk-overlap: 100  # 100 → next chunk pichle chunk ke last 100 units repeat karega — taaki koi sentence/idea beech se kat ke lost na ho jaye
-    top-k: 5          #top-5 chunks
+    top-k: 3          #top-5 chunks
     similarity-threshold: 0.0  #min score for selection
-  cors:
-    allowed-origins: "http://localhost:5173"
-    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
-    allowed-headers: "*"

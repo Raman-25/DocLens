@@ -41,7 +41,17 @@ public class DocumentMetadata {
 
     private LocalDateTime updatedAt;
 
+    @PrePersist //run before the first save
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
 
+    @PreUpdate // runs before every later save
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 
 
 
