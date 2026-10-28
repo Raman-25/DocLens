@@ -1,34 +1,65 @@
-import { useState, useRef, useCallback } from 'react';
-import { X, Upload } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Upload, FileText, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { uploadFiles } from '../../services/api.js';
+import '../../styles/UploadDialog.css';
 
-function FileRow({ name, progress, status, error }) {
-  return (
-    <div className="upload-file-row">
-      <div className="upload-file-row__header">
-        <span className="upload-file-row__name" title={name}>{name}</span>
-        <span className="upload-file-row__status">{status}</span>
-      </div>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${progress}%` }} />
-      </div>
-      {error && <div className="upload-file-row__error">{error}</div>}
-    </div>
-  );
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function UploadDialog({ onClose, onUploaded, toast }) {
-  const [files, setFiles] = useState([]);
-  const [fileStates, setFileStates] = useState([]);
+export default function UploadDialog({ initialFiles = [], onClose, onUploaded, toast }) {
+  const [files, setFiles] = useState(() => (initialFiles?.length ? Array.from(initialFiles) : []));
+  const [fileStates, setFileStates] = useState(() =>
+    initialFiles?.length
+      ? Array.from(initialFiles).map((f) => ({
+          name: f.name,
+          size: f.size,
+          type: f.type || 'application/octet-stream',
+          status: 'ready', // 'ready' | 'uploading' | 'done' | 'failed'
+          error: null,
+        }))
+      : []
+  );
   const [uploading, setUploading] = useState(false);
+  const [overallProgress, setOverallProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
 
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0) {
+      addFiles(initialFiles);
+    }
+  }, [initialFiles]);
+
+  // Esc closes the dialog (Fix 6 item 3b)
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape' && !uploading) {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [uploading, onClose]);
+
+  // Re-selecting files appends to the batch (Fix 6 item 3a)
   function addFiles(incoming) {
-    const pdfs = Array.from(incoming);
-    if (!pdfs.length) return;
-    setFiles(pdfs);
-    setFileStates(pdfs.map((f) => ({ name: f.name, progress: 0, status: 'Ready', error: null })));
+    const list = Array.from(incoming);
+    if (!list.length) return;
+    setFiles((prev) => [...prev, ...list]);
+    setFileStates((prev) => [
+      ...prev,
+      ...list.map((f) => ({
+        name: f.name,
+        size: f.size,
+        type: f.type || 'application/octet-stream',
+        status: 'ready', // 'ready' | 'uploading' | 'done' | 'failed'
+        error: null,
+      })),
+    ]);
   }
 
   function handleDrop(e) {
@@ -48,102 +79,142 @@ export default function UploadDialog({ onClose, onUploaded, toast }) {
 
   function handleInputChange(e) {
     addFiles(e.target.files);
+    e.target.value = '';
   }
 
-  function updateFileState(index, patch) {
-    setFileStates((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, ...patch } : s))
-    );
+  function handleClearAll() {
+    if (uploading) return;
+    setFiles([]);
+    setFileStates([]);
+    setOverallProgress(0);
   }
 
   async function handleUpload() {
     if (!files.length || uploading) return;
     setUploading(true);
+    setOverallProgress(0);
 
-    // Set all to uploading
-    setFileStates((prev) => prev.map((s) => ({ ...s, status: 'Uploading…', progress: 0 })));
+    // Set all ready items to uploading state
+    setFileStates((prev) =>
+      prev.map((s) => ({ ...s, status: 'uploading', error: null }))
+    );
 
     const { data, error } = await uploadFiles(files, (pct) => {
-      setFileStates((prev) => prev.map((s) => ({ ...s, progress: pct })));
+      setOverallProgress(pct);
     });
 
     setUploading(false);
 
     if (error) {
-      // Batch-level failure
+      // Whole-batch request error
       setFileStates((prev) =>
-        prev.map((s) => ({ ...s, status: 'Failed', progress: 0, error }))
+        prev.map((s) => ({
+          ...s,
+          status: 'failed',
+          error: error || 'Upload failed.',
+        }))
       );
       toast(`Upload failed: ${error}`, 'error');
       return;
     }
 
-    // data is an array of §3.2 upload DTOs (fileName capital N)
+    // Per-file results (Fix 4, Fix 7)
     const results = Array.isArray(data) ? data : [data];
-    let anyFailed = false;
+    let successCount = 0;
 
     setFileStates((prev) =>
       prev.map((s, i) => {
         const r = results[i];
-        if (!r) return { ...s, status: 'Failed', error: 'No response for this file.' };
-        if (r.status === 'FAILED') {
-          anyFailed = true;
-          toast(`${s.name} failed to process.`, 'error');
-          return { ...s, progress: 100, status: 'Failed', error: r.message ?? 'Processing failed.' };
+        if (!r) {
+          return { ...s, status: 'failed', error: 'No response for this file.' };
         }
-        return { ...s, progress: 100, status: 'Indexed' };
+        if (r.status === 'FAILED') {
+          return {
+            ...s,
+            status: 'failed',
+            error: r.message ?? 'Processing failed.',
+          };
+        }
+        successCount++;
+        return { ...s, status: 'done', error: null };
       })
     );
 
-    // Build the list-compatible shape from upload response.
-    // Upload DTO uses `fileName` (capital N); convert to `filename` for the sidebar list.
-    const successDocs = results
-      .filter((r) => r && r.status !== 'FAILED')
-      .map((r) => ({
-        id: r.id,
-        filename: r.fileName,   // capital N → lowercase n for §3.1 shape
-        fileSize: r.fileSize,
-        totalPages: null,
-        totalChunks: r.chunksCreated,
-        status: r.status,
-        createdAt: null,
-        updatedAt: null,
-        errorMessage: null,
-        contentType: 'application/pdf',
-      }));
+    // Call onUploaded to refetch documents from the server (NO fabricated rows)
+    onUploaded();
 
-    if (successDocs.length > 0) {
-      onUploaded(successDocs);
+    if (successCount > 0) {
       toast(
-        `${successDocs.length} file${successDocs.length > 1 ? 's' : ''} uploaded successfully.`,
+        `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully.`,
         'success'
       );
     }
-
-    if (!anyFailed) {
-      setTimeout(onClose, 800);
-    }
   }
 
-  return (
-    <div className="backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <button className="btn-icon modal__close" onClick={onClose} title="Close">
-          <X size={18} strokeWidth={1.5} />
-        </button>
-        <h2 className="modal__title">Upload documents</h2>
+  const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
+  const hasFinished = fileStates.length > 0 && fileStates.some((s) => s.status === 'done' || s.status === 'failed');
+  const allDone = fileStates.length > 0 && fileStates.every((s) => s.status === 'done');
 
+  return (
+    <div
+      className="backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !uploading) onClose();
+      }}
+    >
+      <div className="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+        {/* Header */}
+        <div className="upload-modal__header">
+          <div className="upload-modal__header-left">
+            <div className="upload-modal__icon-tile">
+              <Upload size={18} strokeWidth={2} color="var(--accent)" />
+            </div>
+            <div>
+              <h2 id="upload-title" className="upload-modal__title">Upload Documents</h2>
+              <p className="upload-modal__subtitle">PDF · DOCX · TXT · MD · CSV</p>
+            </div>
+          </div>
+          <button
+            className="btn-icon upload-modal__close"
+            onClick={onClose}
+            disabled={uploading}
+            title="Close"
+            aria-label="Close dialog"
+          >
+            <X size={18} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        {/* Dropzone */}
         <div
-          className={`dropzone${dragOver ? ' dropzone--over' : ''}`}
+          className={`upload-dropzone${dragOver ? ' upload-dropzone--over' : ''}`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onClick={() => !uploading && inputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && !uploading && inputRef.current?.click()}
         >
-          <Upload size={28} strokeWidth={1.5} color="var(--text-muted)" />
-          <p className="dropzone__heading">Drop your files here</p>
-          <p className="dropzone__sub">PDF · DOCX · TXT · MD · CSV</p>
+          <div className="upload-dropzone__icon-box">
+            <Upload size={22} strokeWidth={1.75} />
+          </div>
+          <p className="upload-dropzone__prompt">
+            Drag &amp; drop files here
+          </p>
+          <p className="upload-dropzone__browse">
+            or <span className="upload-dropzone__browse-link">click to browse</span>
+          </p>
+
+          <div className="upload-type-chips">
+            <span className="type-chip type-chip--pdf">.pdf</span>
+            <span className="type-chip type-chip--docx">.docx</span>
+            <span className="type-chip type-chip--txt">.txt</span>
+            <span className="type-chip type-chip--md">.md</span>
+            <span className="type-chip type-chip--csv">.csv</span>
+          </div>
         </div>
+
         <input
           ref={inputRef}
           type="file"
@@ -153,30 +224,120 @@ export default function UploadDialog({ onClose, onUploaded, toast }) {
           onChange={handleInputChange}
         />
 
-        {fileStates.length > 0 && (
-          <div className="upload-files">
-            {fileStates.map((s, i) => (
-              <FileRow
-                key={i}
-                name={s.name}
-                progress={s.progress}
-                status={s.status}
-                error={s.error}
+        {/* Overall progress indicator (Fix 6 item 3c) */}
+        {uploading && (
+          <div className="upload-overall-progress">
+            <div className="upload-overall-progress__bar">
+              <div
+                className="upload-overall-progress__fill"
+                style={{ width: `${overallProgress}%` }}
               />
-            ))}
+            </div>
+            <span className="upload-overall-progress__label">
+              Uploading batch… {overallProgress}%
+            </span>
           </div>
         )}
 
-        <div className="upload-actions">
-          <button className="btn-text" onClick={onClose} disabled={uploading}>
-            Cancel
-          </button>
+        {/* File summary and files list */}
+        {fileStates.length > 0 && (
+          <div className="upload-files-section">
+            <div className="upload-summary-row">
+              <span className="upload-summary-text">
+                {fileStates.length} file(s) · {formatBytes(totalBytes)}
+              </span>
+              {!uploading && (
+                <button
+                  type="button"
+                  className="upload-clear-all"
+                  onClick={handleClearAll}
+                >
+                  <Trash2 size={13} strokeWidth={1.5} />
+                  <span>Clear all</span>
+                </button>
+              )}
+            </div>
+
+            <div className="upload-file-rows-list">
+              {fileStates.map((s, i) => {
+                const isFailed = s.status === 'failed';
+                const isDone = s.status === 'done';
+                const isUploading = s.status === 'uploading';
+
+                return (
+                  <div
+                    key={i}
+                    className={`upload-file-card${isFailed ? ' upload-file-card--failed' : isDone ? ' upload-file-card--done' : ''}`}
+                  >
+                    <div className="upload-file-card__main">
+                      <div className="upload-file-card__icon-box">
+                        <FileText size={16} strokeWidth={1.5} />
+                      </div>
+                      <div className="upload-file-card__info">
+                        <span className="upload-file-card__name" title={s.name}>
+                          {s.name}
+                        </span>
+                      </div>
+                      <span className="upload-file-card__size">
+                        {formatBytes(s.size)}
+                      </span>
+                      <div className="upload-file-card__status-icon">
+                        {isFailed && (
+                          <AlertCircle size={16} strokeWidth={1.75} className="status-icon--failed" />
+                        )}
+                        {isDone && (
+                          <CheckCircle2 size={16} strokeWidth={1.75} className="status-icon--done" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress line */}
+                    <div className="upload-file-card__bar">
+                      <div
+                        className={`upload-file-card__bar-fill${
+                          isFailed
+                            ? ' upload-file-card__bar-fill--failed'
+                            : isDone
+                            ? ' upload-file-card__bar-fill--done'
+                            : isUploading
+                            ? ' upload-file-card__bar-fill--active'
+                            : ''
+                        }`}
+                      />
+                    </div>
+
+                    {/* Inline error message */}
+                    {isFailed && s.error && (
+                      <div className="upload-file-card__error-msg">
+                        {s.error}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="upload-modal__footer">
+          {fileStates.some((s) => s.status === 'ready') && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleUpload}
+              disabled={uploading}
+            >
+              {uploading ? 'Uploading…' : 'Upload'}
+            </button>
+          )}
           <button
-            className="btn-primary"
-            onClick={handleUpload}
-            disabled={!files.length || uploading}
+            type="button"
+            className="upload-modal__close-btn"
+            onClick={onClose}
+            disabled={uploading}
           >
-            {uploading ? 'Uploading…' : 'Upload'}
+            Close
           </button>
         </div>
       </div>

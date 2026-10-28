@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
-import { Trash2, MessageSquare, FileText, Upload, Layers } from 'lucide-react';
-import { listDocuments, deleteDocument, uploadFiles } from '../services/api.js';
+import { useEffect, useState } from 'react';
+import { Trash2, MessageSquare, FileText, Upload, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { listDocuments, deleteDocument } from '../services/api.js';
+import '../styles/Sidebar.css';
 
 function formatSize(bytes) {
   if (!bytes) return '';
@@ -9,9 +10,21 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return '—';
+  }
+}
+
 function DocCard({ doc, isActive, onSelect, onDelete }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   async function handleDelete(e) {
     e.stopPropagation();
@@ -27,10 +40,16 @@ function DocCard({ doc, isActive, onSelect, onDelete }) {
     setConfirming(false);
   }
 
+  function handleToggleExpand(e) {
+    e.stopPropagation();
+    setExpanded((prev) => !prev);
+  }
+
   const isIndexed = doc.status === 'INDEXED';
   const sizePart = doc.fileSize ? formatSize(doc.fileSize) : null;
-  const pagesPart = doc.totalPages != null ? `${doc.totalPages}p` : null;
-  const metaParts = [sizePart, pagesPart].filter(Boolean);
+  const chunksCount = doc.totalChunks != null ? doc.totalChunks : '—';
+  const pagesCount = doc.totalPages != null ? doc.totalPages : '—';
+  const dateFormatted = formatDate(doc.createdAt);
 
   return (
     <div
@@ -41,41 +60,75 @@ function DocCard({ doc, isActive, onSelect, onDelete }) {
       onKeyDown={(e) => e.key === 'Enter' && !confirming && onSelect(doc.id)}
       title={doc.errorMessage ?? doc.filename}
     >
-      <FileText size={16} strokeWidth={1.5} className="doc-card__icon" />
+      {/* Top row: icon, name, expand chevron, delete */}
+      <div className="doc-card__top-row">
+        <div className="doc-card__icon-box">
+          <FileText size={16} strokeWidth={1.5} className="doc-card__icon" />
+        </div>
 
-      <div className="doc-card__body">
-        {/* §3.1 DTO uses `filename` (lowercase n) */}
-        <div className="doc-card__name">{doc.filename}</div>
-        {metaParts.length > 0 && (
-          <div className="doc-card__meta">{metaParts.join(' · ')}</div>
-        )}
-        <div className={`doc-card__status doc-card__status--${isIndexed ? 'indexed' : 'other'}`}>
-          <span className={`status-dot status-dot--${isIndexed ? 'indexed' : 'other'}`} />
-          {isIndexed ? 'Indexed' : doc.status.toLowerCase()}
-          {doc.totalChunks != null && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 6, color: 'var(--text-faint)', fontWeight: 400 }}>
-              <Layers size={10} strokeWidth={1.5} />
-              {doc.totalChunks} chunks
-            </span>
+        <div className="doc-card__name" title={doc.filename}>
+          {doc.filename}
+        </div>
+
+        <div className="doc-card__actions">
+          <button
+            type="button"
+            className="btn-icon doc-card__expand-btn"
+            title={expanded ? 'Hide details' : 'Show details'}
+            aria-label={expanded ? 'Hide document stats' : 'Show document stats'}
+            onClick={handleToggleExpand}
+          >
+            {expanded ? <ChevronUp size={15} strokeWidth={1.75} /> : <ChevronDown size={15} strokeWidth={1.75} />}
+          </button>
+
+          {confirming ? (
+            <div className="doc-card__confirm" onClick={(e) => e.stopPropagation()}>
+              <span className="doc-card__confirm-label">Delete?</span>
+              <button className="btn-text" onClick={handleDelete} disabled={deleting}>
+                {deleting ? '…' : 'Delete'}
+              </button>
+              <button className="btn-text" onClick={handleCancel}>Cancel</button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn-icon doc-card__delete-btn"
+              title="Delete document"
+              aria-label="Delete document"
+              onClick={handleDelete}
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+            </button>
           )}
         </div>
       </div>
 
-      <div className="doc-card__actions">
-        {confirming ? (
-          <div className="doc-card__confirm" onClick={(e) => e.stopPropagation()}>
-            <span className="doc-card__confirm-label">Delete?</span>
-            <button className="btn-text" onClick={handleDelete} disabled={deleting}>
-              {deleting ? '…' : 'Delete'}
-            </button>
-            <button className="btn-text" onClick={handleCancel}>Cancel</button>
-          </div>
-        ) : (
-          <button className="btn-icon" title="Delete document" onClick={handleDelete}>
-            <Trash2 size={14} strokeWidth={1.5} />
-          </button>
-        )}
+      {/* Second row: status badge + size */}
+      <div className="doc-card__sub-row">
+        <div className={`doc-card__status doc-card__status--${isIndexed ? 'indexed' : 'other'}`}>
+          <span className={`status-dot status-dot--${isIndexed ? 'indexed' : 'other'}`} />
+          {isIndexed ? 'Indexed' : (doc.status ?? '').toLowerCase()}
+        </div>
+        {sizePart && <span className="doc-card__size">{sizePart}</span>}
       </div>
+
+      {/* Expandable stat boxes (Fix 9 - Raman request 3) */}
+      {expanded && (
+        <div className="doc-card__stats-grid">
+          <div className="doc-stat-box">
+            <span className="doc-stat-box__val doc-stat-box__val--chunks">{chunksCount}</span>
+            <span className="doc-stat-box__lbl">chunks</span>
+          </div>
+          <div className="doc-stat-box">
+            <span className="doc-stat-box__val">{pagesCount}</span>
+            <span className="doc-stat-box__lbl">pages</span>
+          </div>
+          <div className="doc-stat-box">
+            <span className="doc-stat-box__val">{dateFormatted}</span>
+            <span className="doc-stat-box__lbl">added</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -86,12 +139,14 @@ export default function Sidebar({
   selectedDocId,
   onSelect,
   onDelete,
+  isOpen = true,
+  onClose,
+  onUploadOpen,
   toast,
 }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
     async function load() {
@@ -111,66 +166,60 @@ export default function Sidebar({
     return true;
   }
 
-  async function handleUploadFiles(files) {
-    if (!files.length) return;
-    const { data, error } = await uploadFiles(Array.from(files), null);
-    if (error) { toast(`Upload failed: ${error}`, 'error'); return; }
-    const results = Array.isArray(data) ? data : [data];
-    const newDocs = results
-      .filter((r) => r && r.status !== 'FAILED')
-      .map((r) => ({
-        id: r.id,
-        filename: r.fileName,  // upload DTO uses fileName (capital N); normalize to filename
-        fileSize: r.fileSize,
-        totalPages: null,
-        totalChunks: r.chunksCreated,
-        status: r.status,
-        errorMessage: null,
-        contentType: 'application/pdf',
-      }));
-    if (newDocs.length) {
-      setDocuments((prev) => [...newDocs, ...prev]);
-      toast(`${newDocs.length} file${newDocs.length > 1 ? 's' : ''} uploaded.`, 'success');
-    }
-    results.filter((r) => r?.status === 'FAILED').forEach((r) => {
-      toast(`${r.fileName} failed to process.`, 'error');
-    });
-  }
-
+  // Fix 12: Dragging files onto sidebar dropzone opens UploadDialog with staged files
   function handleDrop(e) {
     e.preventDefault();
     setDragOver(false);
-    handleUploadFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files?.length) {
+      onUploadOpen?.(e.dataTransfer.files);
+    }
   }
 
+  // Fix 13: filter OUT documents with status FAILED from sidebar list and count
+  const visibleDocs = documents.filter((d) => d.status !== 'FAILED');
+
+  // Null-safe filter (Fix 6 item 4 - P2-13)
   const filtered = filter.trim()
-    ? documents.filter((d) => d.filename.toLowerCase().includes(filter.toLowerCase()))
-    : documents;
+    ? visibleDocs.filter((d) => (d.filename ?? '').toLowerCase().includes(filter.toLowerCase()))
+    : visibleDocs;
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${!isOpen ? ' sidebar--collapsed' : ''}`} aria-hidden={!isOpen}>
       <div className="sidebar__header">
         <div className="sidebar__heading">
           <span className="sidebar__title">Knowledge Base</span>
           <span className="sidebar__subtitle">Indexed vector documents</span>
         </div>
-        {/* Placeholder chat-history icon — no behavior in v1 */}
-        <button className="btn-icon" title="Chat history (coming soon)" disabled>
-          <MessageSquare size={16} strokeWidth={1.5} />
-        </button>
+        <div className="sidebar__header-actions">
+          <button className="btn-icon" title="Chat history (coming soon)" disabled>
+            <MessageSquare size={16} strokeWidth={1.5} />
+          </button>
+          {/* Close sidebar control (Fix 11 - Raman request 5) */}
+          {onClose && (
+            <button
+              type="button"
+              className="btn-icon sidebar__close-btn"
+              title="Close sidebar"
+              aria-label="Close sidebar"
+              onClick={onClose}
+            >
+              <X size={16} strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="sidebar__list">
-        {/* Inline upload dropzone */}
+        {/* Inline upload dropzone (Fix 12: click opens UploadDialog) */}
         <div
           className={`sidebar-dropzone${dragOver ? ' sidebar-dropzone--over' : ''}`}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => onUploadOpen?.([])}
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+          onKeyDown={(e) => e.key === 'Enter' && onUploadOpen?.([])}
         >
           <Upload size={16} strokeWidth={1.5} color="var(--accent)" />
           <div className="sidebar-dropzone__text">
@@ -178,14 +227,6 @@ export default function Sidebar({
             <span className="sidebar-dropzone__hint">PDF, Word, Markdown, TXT, CSV (max 25MB)</span>
           </div>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.docx,.txt,.md,.csv"
-          style={{ display: 'none' }}
-          onChange={(e) => handleUploadFiles(e.target.files)}
-        />
 
         <div className="sidebar-divider" />
 
@@ -193,7 +234,7 @@ export default function Sidebar({
           <p className="sidebar__empty">Loading…</p>
         ) : (
           <>
-            {/* All Documents card */}
+            {/* All Documents card (Fix 13: reflects visibleDocs count) */}
             <div
               className={`all-docs-card${!selectedDocId ? ' all-docs-card--active' : ''}`}
               onClick={() => onSelect(null)}
@@ -203,7 +244,7 @@ export default function Sidebar({
             >
               <div className="all-docs-card__top">
                 <span className="all-docs-card__title">All Documents</span>
-                <span className="all-docs-card__count">{documents.length}</span>
+                <span className="all-docs-card__count">{visibleDocs.length}</span>
               </div>
               <div className="all-docs-card__sub">Search across complete corpus</div>
             </div>
@@ -220,7 +261,7 @@ export default function Sidebar({
 
             {/* Document cards list */}
             <div className="sidebar-docs-list">
-              {documents.length === 0 ? (
+              {visibleDocs.length === 0 ? (
                 <p className="sidebar__empty">No documents yet.</p>
               ) : filtered.length === 0 ? (
                 <p className="sidebar__empty">No documents match "{filter}".</p>

@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Copy, Sparkles, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { chatQuery, createChatStream } from '../../services/api.js';
+import { chatQuery, createChatStream, semanticSearch } from '../../services/api.js';
 import { ChunkCard } from '../search/ChunkCard.jsx';
+import '../../styles/ChatPanel.css';
 
 const SUGGESTIONS = [
   {
@@ -113,7 +114,16 @@ function AssistantMessage({ msg, toast }) {
   );
 }
 
-export default function ChatPanel({ selectedDoc, documents, toast, streaming, onUploadOpen, registerNewChat }) {
+export default function ChatPanel({
+  selectedDoc,
+  documents,
+  toast,
+  streaming,
+  setStreaming,
+  onFeedUpdate,
+  onUploadOpen,
+  registerNewChat,
+}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -162,6 +172,7 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
       return;
     }
     conversationIdRef.current = data.conversationId;
+    const citations = data.citations ?? [];
     setMessages((prev) =>
       prev.map((m) =>
         m.id === 'pending'
@@ -169,12 +180,15 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
               id: Date.now(),
               role: 'assistant',
               text: data.answer,
-              citations: data.citations ?? [],
+              citations,
               responseTimeMs: data.responseTimeMs,
             }
           : m
       )
     );
+    if (citations.length > 0) {
+      onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+    }
   }
 
   async function sendStreaming(question) {
@@ -183,6 +197,25 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
       await sendNonStreaming(question);
       return;
     }
+
+    // Fix 3: fire parallel similarity search alongside stream
+    let parallelMatches = null;
+    const searchPayload = {
+      query: question,
+      topK: 5,
+      similaritySearch: 0.0,
+    };
+    if (selectedDoc) searchPayload.documentId = selectedDoc.id;
+
+    const searchPromise = semanticSearch(searchPayload)
+      .then(({ data }) => {
+        if (data?.matches) {
+          parallelMatches = data.matches;
+        }
+      })
+      .catch(() => {
+        // Parallel search failure must not break the stream
+      });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -242,10 +275,7 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
           .split(/\r?\n/)
           .filter((l) => l.startsWith('data:'));
         if (!dataLines.length) continue;
-        // Join multi-line data fields with \n per SSE spec, strip `data:` prefix
-        // and one optional leading space from each line.
-        // Remove exactly "data:" (5 chars), keep remainder verbatim —
-        // the leading space is the word separator Spring embeds in the token.
+        // Strip exactly the 5 characters "data:", keep the remainder verbatim.
         const token = dataLines.map((l) => l.slice(5)).join('\n');
         if (token.trim() === '[DONE]') return;
         accumulated += token;
@@ -260,11 +290,17 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
         // Decode in streaming mode so multi-byte chars never split across reads
         buffer += decoder.decode(value, { stream: true });
 
-        // Hold back everything after the last complete event boundary
-        const boundary = buffer.lastIndexOf('\n\n');
-        if (boundary !== -1) {
-          const complete = buffer.slice(0, boundary + 2);
-          buffer = buffer.slice(boundary + 2);
+        // Hold back everything after the last complete event boundary using /\r?\n\r?\n/
+        const boundaryRegex = /\r?\n\r?\n/g;
+        let lastMatch = null;
+        let m;
+        while ((m = boundaryRegex.exec(buffer)) !== null) {
+          lastMatch = m;
+        }
+        if (lastMatch !== null) {
+          const splitIndex = lastMatch.index + lastMatch[0].length;
+          const complete = buffer.slice(0, splitIndex);
+          buffer = buffer.slice(splitIndex);
           parseEvents(complete);
           flushRender();
         }
@@ -281,20 +317,34 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
 
       try { await reader.cancel(); } catch (_) {}
 
+      // Await parallel search completion to attach citations
+      try { await searchPromise; } catch (_) {}
+      const citations = parallelMatches ?? [];
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, text: accumulated, streaming: false }
+            ? { ...m, text: accumulated, streaming: false, citations: citations.length ? citations : undefined }
             : m
         )
       );
+
+      if (citations.length > 0) {
+        onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+      }
     } catch (err) {
       if (err.name === 'AbortError') {
+        const citations = parallelMatches ? parallelMatches : undefined;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, streaming: false, stopped: true } : m
+            m.id === assistantId
+              ? { ...m, streaming: false, stopped: true, citations }
+              : m
           )
         );
+        if (citations && citations.length > 0) {
+          onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+        }
         return;
       }
       toast('An error occurred while streaming. The partial answer has been kept.', 'error');
@@ -344,11 +394,8 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
     }
   }
 
-  const docCount = documents.length;
-
   return (
     <div className="chat-panel">
-
       <div className="chat-messages">
         <div className="chat-messages-inner">
           {messages.length === 0 ? (
@@ -390,6 +437,16 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
       </div>
 
       <div className="chat-input-area">
+        {loading && (
+          <div className="ai-responding-indicator">
+            <span className="ai-responding-dots">
+              <span className="dot" />
+              <span className="dot" />
+              <span className="dot" />
+            </span>
+            <span className="ai-responding-text">AI is responding...</span>
+          </div>
+        )}
         <div className="chat-input-inner">
           <button
             className="btn-icon"
@@ -402,7 +459,7 @@ export default function ChatPanel({ selectedDoc, documents, toast, streaming, on
           <textarea
             ref={textareaRef}
             className="chat-textarea"
-            placeholder="Ask a question…"
+            placeholder={loading ? 'Waiting for response...' : 'Ask a question…'}
             rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}

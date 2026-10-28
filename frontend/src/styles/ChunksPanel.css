@@ -1,0 +1,29 @@
+/* ── Chunks panel ── */
+.chunks-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chunks-panel-inner {
+  width: 100%;
+  max-width: 768px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 16px;
+}
+
+.chunks-header {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.chunks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

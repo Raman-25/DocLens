@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { CheckCircle, AlertCircle, Info } from 'lucide-react';
+import '../styles/Toast.css';
 
 const ICONS = {
   success: CheckCircle,

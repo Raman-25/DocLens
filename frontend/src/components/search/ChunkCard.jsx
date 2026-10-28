@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FileText, Copy, Check } from 'lucide-react';
+import '../../styles/ChunkCard.css';
 
 function getTruncatedSnippet(text, maxLen = 300) {
   if (!text || text.length <= maxLen) return text || '';
@@ -20,7 +21,7 @@ export function ChunkCard({ match, toast }) {
   const hasIndex = typeof match?.chunkIndex === 'number' && !isNaN(match.chunkIndex);
   const hasPage = typeof match?.pageNumber === 'number' && !isNaN(match.pageNumber);
   const hasScore = typeof match?.similarityScore === 'number' && !isNaN(match.similarityScore);
-  const scorePercent = hasScore ? Math.round(match.similarityScore * 100) : null;
+  const scorePercent = hasScore ? Math.min(Math.max(Math.round(match.similarityScore * 100), 0), 100) : null;
 
   async function handleCopy() {
     try {

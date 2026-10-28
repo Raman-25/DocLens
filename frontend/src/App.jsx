@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, RotateCcw, Sun, Moon } from 'lucide-react';
+import { Sparkles, RotateCcw, Sun, Moon, PanelLeft, Wifi } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { ToastContainer, useToast } from './components/Toast.jsx';
 import Sidebar from './components/Sidebar.jsx';
@@ -8,16 +8,25 @@ import SearchPanel from './components/search/SearchPanel.jsx';
 import ChunksPanel from './components/search/ChunksPanel.jsx';
 import UploadDialog from './components/documents/UploadDialog.jsx';
 import { TABS } from './constants/index.js';
+import { listDocuments } from './services/api.js';
+import './styles/App.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(TABS.CHAT);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [stagedFiles, setStagedFiles] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [documents, setDocuments] = useState([]);
-  const [lastSearchMatches, setLastSearchMatches] = useState(null);
   const [streaming, setStreaming] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Fix 5: Unified chunks feed (chat + search citations in Chunks tab)
+  const [feedChunks, setFeedChunks] = useState(null);
+  const [feedSource, setFeedSource] = useState(null); // 'chat' | 'search'
+  const [feedQuery, setFeedQuery] = useState('');
+
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('doclens_theme') || 'dark';
@@ -49,6 +58,22 @@ export default function App() {
     if (selectedDocId === id) setSelectedDocId(null);
   }
 
+  function handleFeedUpdate({ chunks, source, query }) {
+    setFeedChunks(chunks);
+    setFeedSource(source);
+    setFeedQuery(query || '');
+  }
+
+  function handleOpenUpload(incoming = []) {
+    setStagedFiles(incoming && incoming.length ? Array.from(incoming) : []);
+    setUploadOpen(true);
+  }
+
+  async function handleRefreshDocuments() {
+    const { data } = await listDocuments();
+    if (data) setDocuments(data);
+  }
+
   const selectedDoc = documents.find((d) => d.id === selectedDocId) ?? null;
   const contextText = selectedDoc ? selectedDoc.filename : 'All Uploaded Documents';
 
@@ -57,16 +82,29 @@ export default function App() {
       <div className="app">
         {/* ── Top Bar (Brand left, Context centered, Swagger + Theme right) ── */}
         <header className="topbar">
-          <div className="topbar__logo-tile">
-            <div className="topbar__logo-icon">
-              <Sparkles size={18} strokeWidth={1.5} color="var(--btn-primary-text)" />
-            </div>
-            <div className="topbar__brand">
-              <div className="topbar__brand-top">
-                <span className="topbar__logo-text">DocLens</span>
-                <span className="topbar__badge">AI RAG</span>
+          <div className="topbar__left-group">
+            {/* Fix 11: Sidebar toggle button */}
+            <button
+              type="button"
+              className={`btn-icon sidebar-toggle-btn${!sidebarOpen ? ' sidebar-toggle-btn--collapsed' : ''}`}
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              title={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
+              aria-label="Toggle sidebar"
+            >
+              <PanelLeft size={18} strokeWidth={1.5} />
+            </button>
+
+            <div className="topbar__logo-tile">
+              <div className="topbar__logo-icon">
+                <Sparkles size={18} strokeWidth={1.5} color="var(--btn-primary-text)" />
               </div>
-              <span className="topbar__stack">Spring AI · PostgreSQL pgvector · Groq</span>
+              <div className="topbar__brand">
+                <div className="topbar__brand-top">
+                  <span className="topbar__logo-text">DocLens</span>
+                  <span className="topbar__badge">AI RAG</span>
+                </div>
+                <span className="topbar__stack">Spring AI · PostgreSQL pgvector · Groq</span>
+              </div>
             </div>
           </div>
 
@@ -111,11 +149,14 @@ export default function App() {
             selectedDocId={selectedDocId}
             onSelect={handleDocSelect}
             onDelete={handleDocDelete}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            onUploadOpen={handleOpenUpload}
             toast={toast}
           />
 
           <main className="main">
-            {/* ── Tabs Bar (Tabs left, Stream toggle + Refresh right) ── */}
+            {/* ── Tabs Bar (Tabs left, Stream pill + New chat + Refresh right — Fix 8) ── */}
             <div className="tabs-bar">
               <nav className="tabs" role="tablist">
                 {Object.values(TABS).map((tab) => (
@@ -132,24 +173,32 @@ export default function App() {
               </nav>
 
               <div className="tabs-bar__right">
-                <div className="stream-switch">
-                  <span className="stream-switch__label">Stream Tokens</span>
-                  <button
-                    type="button"
-                    className={`stream-switch__track${streaming ? ' stream-switch__track--on' : ''}`}
-                    role="switch"
-                    aria-checked={streaming}
-                    title={streaming ? 'Streaming on' : 'Streaming off'}
-                    onClick={() => setStreaming((prev) => !prev)}
-                  >
-                    <span className="stream-switch__knob" />
-                  </button>
-                </div>
+                {/* Fix 8: Streaming pill + New chat replace the old toggle row */}
+                <button
+                  type="button"
+                  className={`streaming-pill${streaming ? ' streaming-pill--active' : ''}`}
+                  onClick={() => setStreaming((prev) => !prev)}
+                  title={streaming ? 'Streaming on (click to disable)' : 'Streaming off (click to enable)'}
+                  aria-label="Toggle streaming mode"
+                >
+                  <Wifi size={13} strokeWidth={2.2} />
+                  <span>Streaming</span>
+                </button>
+                <button
+                  type="button"
+                  className="toolbar-new-chat-btn"
+                  onClick={() => newChatRef.current?.()}
+                  title="New chat"
+                  aria-label="New chat"
+                >
+                  <RotateCcw size={13} strokeWidth={1.8} />
+                  <span>New chat</span>
+                </button>
                 <button
                   type="button"
                   className="btn-icon"
-                  title="New chat"
-                  aria-label="New chat"
+                  title="Reset conversation"
+                  aria-label="Reset conversation"
                   onClick={() => newChatRef.current?.()}
                 >
                   <RotateCcw size={15} strokeWidth={1.5} />
@@ -164,7 +213,9 @@ export default function App() {
                   documents={documents}
                   toast={toast}
                   streaming={streaming}
-                  onUploadOpen={() => setUploadOpen(true)}
+                  setStreaming={setStreaming}
+                  onFeedUpdate={handleFeedUpdate}
+                  onUploadOpen={() => handleOpenUpload([])}
                   registerNewChat={(fn) => { newChatRef.current = fn; }}
                 />
               )}
@@ -172,12 +223,19 @@ export default function App() {
                 <SearchPanel
                   documents={documents}
                   selectedDocId={selectedDocId}
-                  onSearchResults={setLastSearchMatches}
+                  onSearchResults={(matches, q) =>
+                    handleFeedUpdate({ chunks: matches, source: 'search', query: q })
+                  }
                   toast={toast}
                 />
               )}
               {activeTab === TABS.CHUNKS && (
-                <ChunksPanel matches={lastSearchMatches} toast={toast} />
+                <ChunksPanel
+                  chunks={feedChunks}
+                  source={feedSource}
+                  query={feedQuery}
+                  toast={toast}
+                />
               )}
             </div>
           </main>
@@ -185,8 +243,12 @@ export default function App() {
 
         {uploadOpen && (
           <UploadDialog
-            onClose={() => setUploadOpen(false)}
-            onUploaded={(newDocs) => setDocuments((prev) => [...newDocs, ...prev])}
+            initialFiles={stagedFiles}
+            onClose={() => {
+              setUploadOpen(false);
+              setStagedFiles([]);
+            }}
+            onUploaded={handleRefreshDocuments}
             toast={toast}
           />
         )}

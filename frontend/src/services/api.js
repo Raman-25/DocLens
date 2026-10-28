@@ -61,7 +61,6 @@ export function uploadFile(file, onProgress) {
   form.append('file', file);
   return call(() =>
     http.post('/api/v1/documents/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
         if (onProgress && e.total) {
           onProgress(Math.round((e.loaded / e.total) * 100));
@@ -78,7 +77,6 @@ export function uploadFiles(files, onProgress) {
   files.forEach((f) => form.append('files', f));
   return call(() =>
     http.post('/api/v1/documents/upload-multiple', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
         if (onProgress && e.total) {
           onProgress(Math.round((e.loaded / e.total) * 100));

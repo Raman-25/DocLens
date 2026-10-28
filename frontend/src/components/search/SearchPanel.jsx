@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { semanticSearch } from '../../services/api.js';
 import { ChunkCard } from './ChunkCard.jsx';
+import '../../styles/SearchPanel.css';
 
 export default function SearchPanel({
   documents,
@@ -12,7 +13,11 @@ export default function SearchPanel({
   const [topK, setTopK] = useState(5);
   // NOTE: search uses `similaritySearch`, NOT `minSimilarity` (§3.8)
   const [similarityThreshold, setSimilarityThreshold] = useState(0.0);
-  const [scopeDocId, setScopeDocId] = useState('');
+  const [scopeDocId, setScopeDocId] = useState(selectedDocId ?? '');
+
+  useEffect(() => {
+    setScopeDocId(selectedDocId ?? '');
+  }, [selectedDocId]);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +43,7 @@ export default function SearchPanel({
 
     const matches = data.matches ?? [];
     setResults({ query: data.query, totalMatches: data.totalMatches, matches });
-    onSearchResults(matches);
+    onSearchResults?.(matches, q);
   }
 
   function handleKeyDown(e) {
