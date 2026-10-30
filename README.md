@@ -210,51 +210,6 @@ memory consistency, and citation integrity.
 
 ---
 
-## 🗄️ Database Design
-
-```mermaid
-erDiagram
-    DOCUMENT_METADATA ||--o{ VECTOR_STORE : "chunks (via metadata.documentId)"
-    SPRING_AI_CHAT_MEMORY ||--o{ CHAT_CITATIONS : "citations (via conversation_id + assistant_index)"
-    DOCUMENT_METADATA {
-        uuid id PK
-        string filename
-        string contentType
-        bigint fileSize
-        int totalPages
-        int totalChunks
-        string status
-        string errorMessage
-        timestamp createdAt
-        timestamp updatedAt
-    }
-    VECTOR_STORE {
-        uuid id PK
-        string content
-        json metadata
-        vector embedding
-    }
-    SPRING_AI_CHAT_MEMORY {
-        string conversation_id
-        string content
-        string type
-        timestamp timestamp
-        int sequence_id
-    }
-    CHAT_CITATIONS {
-        uuid id PK
-        string conversation_id
-        int assistant_index
-        jsonb citations
-        timestamp created_at
-    }
-```
-
-- Relationships are **logical, not foreign keys**. Chunks link via the `documentId` key in vector-store metadata. Citations link via the `(conversation_id, assistant_index)` unique constraint.
-- **Two counters, never mixed:** `sequence_id` orders all messages. `assistant_index` counts assistant messages only.
-
----
-
 ## 🔌 API Reference
 
 Base URL: `http://localhost:8080/api/v1` · Every response uses the envelope
