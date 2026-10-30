@@ -219,7 +219,6 @@ export default function ChatPanel({
     let parallelMatches = null;
     const searchPayload = {
       query: question,
-      topK: 5,
       similaritySearch: 0.0,
     };
     if (selectedDoc) searchPayload.documentId = selectedDoc.id;
