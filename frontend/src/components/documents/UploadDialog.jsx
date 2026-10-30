@@ -152,8 +152,6 @@ export default function UploadDialog({ initialFiles = [], onClose, onUploaded, t
   }
 
   const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
-  const hasFinished = fileStates.length > 0 && fileStates.some((s) => s.status === 'done' || s.status === 'failed');
-  const allDone = fileStates.length > 0 && fileStates.every((s) => s.status === 'done');
 
   return (
     <div
