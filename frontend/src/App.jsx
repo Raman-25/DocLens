@@ -8,7 +8,7 @@ import SearchPanel from './components/search/SearchPanel.jsx';
 import ChunksPanel from './components/search/ChunksPanel.jsx';
 import UploadDialog from './components/documents/UploadDialog.jsx';
 import { TABS } from './constants/index.js';
-import { listDocuments } from './services/api.js';
+import { listDocuments, listConversations, getConversationMessages } from './services/api.js';
 import './styles/App.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -21,6 +21,12 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [streaming, setStreaming] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Chat conversation state (lifted from ChatPanel)
+  const [conversationId, setConversationId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Fix 5: Unified chunks feed (chat + search citations in Chunks tab)
   const [feedChunks, setFeedChunks] = useState(null);
@@ -37,6 +43,15 @@ export default function App() {
 
   const newChatRef = useRef(null);
   const { toasts, toast, dismiss } = useToast();
+
+  async function refreshConversations() {
+    const { data, error } = await listConversations();
+    if (error) {
+      toast(error, 'error');
+    } else if (data) {
+      setConversations(data);
+    }
+  }
 
   useEffect(() => {
     try {
@@ -64,6 +79,51 @@ export default function App() {
     setFeedQuery(query || '');
   }
 
+  function handleNewChat() {
+    if (chatLoading) return;
+    setConversationId(null);
+    setMessages([]);
+    setSelectedDocId(null);
+    setActiveTab(TABS.CHAT);
+    newChatRef.current?.();
+    refreshConversations();
+  }
+
+  async function handleSelectConversation(id) {
+    if (chatLoading) return;
+    const { data, error } = await getConversationMessages(id);
+    if (error) {
+      toast(error, 'error');
+      return;
+    }
+    if (data) {
+      const sorted = [...data].sort((a, b) => (a.sequenceId ?? 0) - (b.sequenceId ?? 0));
+      const mapped = sorted.map((m, idx) => ({
+        id: m.sequenceId != null ? `seq-${m.sequenceId}` : `msg-${idx}`,
+        role: m.type?.toLowerCase() === 'user' ? 'user' : 'assistant',
+        text: m.content || '',
+        citations: m.citations && m.citations.length > 0 ? m.citations : undefined,
+        timestamp: m.timestamp,
+      }));
+
+      setConversationId(id);
+      setMessages(mapped);
+      setSelectedDocId(null);
+      setActiveTab(TABS.CHAT);
+
+      // Chunks feed on load: rebuild from the LAST assistant message's citations
+      const assistantMessages = mapped.filter((m) => m.role === 'assistant');
+      const lastAssistant = assistantMessages[assistantMessages.length - 1];
+      if (lastAssistant && lastAssistant.citations && lastAssistant.citations.length > 0) {
+        handleFeedUpdate({
+          chunks: lastAssistant.citations,
+          source: 'chat',
+          query: '',
+        });
+      }
+    }
+  }
+
   function handleOpenUpload(incoming = []) {
     setStagedFiles(incoming && incoming.length ? Array.from(incoming) : []);
     setUploadOpen(true);
@@ -83,17 +143,6 @@ export default function App() {
         {/* ── Top Bar (Brand left, Context centered, Swagger + Theme right) ── */}
         <header className="topbar">
           <div className="topbar__left-group">
-            {/* Fix 11: Sidebar toggle button */}
-            <button
-              type="button"
-              className={`btn-icon sidebar-toggle-btn${!sidebarOpen ? ' sidebar-toggle-btn--collapsed' : ''}`}
-              onClick={() => setSidebarOpen((prev) => !prev)}
-              title={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
-              aria-label="Toggle sidebar"
-            >
-              <PanelLeft size={18} strokeWidth={1.5} />
-            </button>
-
             <div className="topbar__logo-tile">
               <div className="topbar__logo-icon">
                 <Sparkles size={18} strokeWidth={1.5} color="var(--btn-primary-text)" />
@@ -153,27 +202,45 @@ export default function App() {
             onClose={() => setSidebarOpen(false)}
             onUploadOpen={handleOpenUpload}
             toast={toast}
+            conversations={conversations}
+            activeConversationId={conversationId}
+            onSelectConversation={handleSelectConversation}
+            onOpenChat={() => setActiveTab(TABS.CHAT)}
+            onFetchConversations={refreshConversations}
+            isStreaming={chatLoading}
           />
 
           <main className="main">
-            {/* ── Tabs Bar (Tabs left, Stream pill + New chat + Refresh right — Fix 8) ── */}
+            {/* ── Tabs Bar (Tabs left, Stream pill + New chat right) ── */}
             <div className="tabs-bar">
-              <nav className="tabs" role="tablist">
-                {Object.values(TABS).map((tab) => (
+              <div className="tabs-bar__left">
+                {!sidebarOpen && (
                   <button
-                    key={tab}
-                    role="tab"
-                    aria-selected={activeTab === tab}
-                    className={`tab${activeTab === tab ? ' tab--active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
+                    type="button"
+                    className="btn-icon sidebar-reopen-btn"
+                    onClick={() => setSidebarOpen(true)}
+                    title="Open sidebar"
+                    aria-label="Open sidebar"
                   >
-                    {tab}
+                    <PanelLeft size={16} strokeWidth={1.5} />
                   </button>
-                ))}
-              </nav>
+                )}
+                <nav className="tabs" role="tablist">
+                  {Object.values(TABS).map((tab) => (
+                    <button
+                      key={tab}
+                      role="tab"
+                      aria-selected={activeTab === tab}
+                      className={`tab${activeTab === tab ? ' tab--active' : ''}`}
+                      onClick={() => setActiveTab(tab)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </nav>
+              </div>
 
               <div className="tabs-bar__right">
-                {/* Fix 8: Streaming pill + New chat replace the old toggle row */}
                 <button
                   type="button"
                   className={`streaming-pill${streaming ? ' streaming-pill--active' : ''}`}
@@ -187,21 +254,13 @@ export default function App() {
                 <button
                   type="button"
                   className="toolbar-new-chat-btn"
-                  onClick={() => newChatRef.current?.()}
+                  onClick={handleNewChat}
+                  disabled={chatLoading}
                   title="New chat"
                   aria-label="New chat"
                 >
                   <RotateCcw size={13} strokeWidth={1.8} />
                   <span>New chat</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  title="Reset conversation"
-                  aria-label="Reset conversation"
-                  onClick={() => newChatRef.current?.()}
-                >
-                  <RotateCcw size={15} strokeWidth={1.5} />
                 </button>
               </div>
             </div>
@@ -214,8 +273,15 @@ export default function App() {
                   toast={toast}
                   streaming={streaming}
                   setStreaming={setStreaming}
+                  conversationId={conversationId}
+                  setConversationId={setConversationId}
+                  messages={messages}
+                  setMessages={setMessages}
+                  loading={chatLoading}
+                  setLoading={setChatLoading}
                   onFeedUpdate={handleFeedUpdate}
                   onUploadOpen={() => handleOpenUpload([])}
+                  onConversationCreated={refreshConversations}
                   registerNewChat={(fn) => { newChatRef.current = fn; }}
                 />
               )}

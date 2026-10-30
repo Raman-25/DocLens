@@ -25,10 +25,6 @@
   justify-self: start;
 }
 
-.sidebar-toggle-btn {
-  margin-right: 4px;
-}
-
 .topbar__logo-tile {
   display: flex;
   align-items: center;
@@ -166,6 +162,27 @@
   height: 44px;
 }
 
+.tabs-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.sidebar-reopen-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+.sidebar-reopen-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -244,8 +261,12 @@
   color: var(--text);
   transition: all 180ms ease;
 }
-.toolbar-new-chat-btn:hover {
+.toolbar-new-chat-btn:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+.toolbar-new-chat-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Tab panels ── */

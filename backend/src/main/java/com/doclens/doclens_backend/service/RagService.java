@@ -30,6 +30,7 @@ public class RagService {
     private final VectorStore vectorStore;
     private final ChatClient chatClient;
     private final AppProperties appProperties;
+    private final ChatHistoryService chatHistoryService;
 
     //to ask anything related to document
     public ChatResponseDto askQuestion(ChatRequestDto request){
@@ -59,7 +60,7 @@ public class RagService {
 //        String prompt = buildPrompt(request.getQuestion(),contextText);
 
         String answer = this.chatClient.prompt()
-                .system(s -> s.param("doc_context", contextText))   //set the system message for this call
+                .system(s -> s.param("doc_context", contextText))   //system default prompt+ doc context(the page no+ doc name)
                 .user(question)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))  //set the convo id for the chat memory
                 .call()
@@ -67,13 +68,19 @@ public class RagService {
 
         long responseTime = System.currentTimeMillis() - startTime;
 
+        //saving the citations
+        try {
+            chatHistoryService.saveCitations(conversationId, citationDtos);
+        } catch (Exception e) {
+            log.warn("Failed to save citations for conversation {}", conversationId, e);
+        }
+
         return ChatResponseDto.builder()
                 .answer(answer)
                 .conversationId(conversationId)
                 .citations(citationDtos)
                 .responseTimeMs(responseTime)
                 .build();
-
 
     }
 

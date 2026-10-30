@@ -143,10 +143,17 @@ export default function Sidebar({
   onClose,
   onUploadOpen,
   toast,
+  conversations = [],
+  activeConversationId = null,
+  onSelectConversation,
+  onOpenChat,
+  onFetchConversations,
+  isStreaming = false,
 }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [showChats, setShowChats] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -157,6 +164,17 @@ export default function Sidebar({
     }
     load();
   }, [setDocuments, toast]);
+
+  function handleToggleChats() {
+    setShowChats((prev) => {
+      const next = !prev;
+      if (next) {
+        onFetchConversations?.();
+        onOpenChat?.();
+      }
+      return next;
+    });
+  }
 
   async function handleDelete(id) {
     const { error } = await deleteDocument(id);
@@ -191,7 +209,13 @@ export default function Sidebar({
           <span className="sidebar__subtitle">Indexed vector documents</span>
         </div>
         <div className="sidebar__header-actions">
-          <button className="btn-icon" title="Chat history (coming soon)" disabled>
+          <button
+            type="button"
+            className={`btn-icon sidebar__chat-btn${showChats ? ' sidebar__chat-btn--active' : ''}`}
+            title={showChats ? 'Hide chat history' : 'Show chat history'}
+            aria-label={showChats ? 'Hide chat history' : 'Show chat history'}
+            onClick={handleToggleChats}
+          >
             <MessageSquare size={16} strokeWidth={1.5} />
           </button>
           {/* Close sidebar control (Fix 11 - Raman request 5) */}
@@ -210,6 +234,35 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar__list">
+        {/* Chats section (hidden by default, toggled via chat button next to Knowledge Base) */}
+        {showChats && (
+          <div className="sidebar-section sidebar-section--chats">
+            <div className="sidebar-section__header">
+              <span className="sidebar-section__title">Chats</span>
+            </div>
+
+            {conversations.length > 0 && (
+              <div className="sidebar-chats-list">
+                {conversations.map((conv) => (
+                  <button
+                    key={conv.conversationId}
+                    type="button"
+                    className={`sidebar-chat-row${activeConversationId === conv.conversationId ? ' sidebar-chat-row--active' : ''}`}
+                    onClick={() => onSelectConversation(conv.conversationId)}
+                    disabled={isStreaming}
+                    title={conv.title}
+                  >
+                    <MessageSquare size={14} strokeWidth={1.5} className="sidebar-chat-row__icon" />
+                    <span className="sidebar-chat-row__title">{conv.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="sidebar-divider" />
+          </div>
+        )}
+
         {/* Inline upload dropzone (Fix 12: click opens UploadDialog) */}
         <div
           className={`sidebar-dropzone${dragOver ? ' sidebar-dropzone--over' : ''}`}

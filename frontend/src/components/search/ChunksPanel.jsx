@@ -35,13 +35,13 @@ export default function ChunksPanel({ chunks, source, query, matches, toast }) {
   }
 
   const sourceText = source === 'chat' ? 'From chat' : 'From search';
-  const queryText = query ? ` "${query}"` : '';
+  const queryText = query ? `: "${query}"` : '';
 
   return (
     <div className="chunks-panel">
       <div className="chunks-panel-inner">
         <div className="chunks-header">
-          {sourceText}:{queryText} · {list.length} chunk{list.length !== 1 ? 's' : ''}
+          {sourceText}{queryText} · {list.length} chunk{list.length !== 1 ? 's' : ''}
         </div>
         <div className="chunks-list">
           {list.map((m, i) => (

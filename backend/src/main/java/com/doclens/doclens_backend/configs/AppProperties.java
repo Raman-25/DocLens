@@ -25,8 +25,8 @@ public class AppProperties {
         private  int minChunkSizeChars=350;  //chunk's total length — letters, spaces, dots, everything included — must cross 350.
         private  int minChunkLengthToEmbed=5;  //any leftover chunk shorter than 5 chars
         private  int maxNumChunks=10000;  //a safety cap
-        //        private int chunkOverlap = 100;
-        private int topK = 5;
+        //        private int chunkOverlap = 10ntend0;
+        private int topK = 3;
         private double similarityThreshold = 0.0;
     }
 }

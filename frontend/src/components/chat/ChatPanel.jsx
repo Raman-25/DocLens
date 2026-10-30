@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Copy, Sparkles, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { chatQuery, createChatStream, semanticSearch } from '../../services/api.js';
+import { chatQuery, createChatStream, semanticSearch, saveCitations } from '../../services/api.js';
 import { ChunkCard } from '../search/ChunkCard.jsx';
 import '../../styles/ChatPanel.css';
 
@@ -120,17 +120,26 @@ export default function ChatPanel({
   toast,
   streaming,
   setStreaming,
+  conversationId,
+  setConversationId,
+  messages,
+  setMessages,
+  loading,
+  setLoading,
   onFeedUpdate,
   onUploadOpen,
+  onConversationCreated,
   registerNewChat,
 }) {
-  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const conversationIdRef = useRef(null);
+  const conversationIdRef = useRef(conversationId);
   const abortRef = useRef(null);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -143,18 +152,21 @@ export default function ChatPanel({
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [input]);
 
-  function newChat() {
+  function handleResetChat() {
     if (abortRef.current) abortRef.current.abort();
-    conversationIdRef.current = null;
-    setMessages([]);
-    setLoading(false);
+    abortRef.current = null;
     setInput('');
   }
 
-  // Expose newChat to parent so the toolbar button can trigger it
+  // Clear input when switching chats or starting new chat
   useEffect(() => {
-    registerNewChat?.(newChat);
-  }, []);
+    setInput('');
+  }, [conversationId]);
+
+  // Expose reset to parent
+  useEffect(() => {
+    registerNewChat?.(handleResetChat);
+  }, [registerNewChat]);
 
   function buildPayload(question) {
     const payload = { question };
@@ -171,7 +183,9 @@ export default function ChatPanel({
       setMessages((prev) => prev.slice(0, -1));
       return;
     }
+    const isNew = !conversationIdRef.current && data.conversationId;
     conversationIdRef.current = data.conversationId;
+    setConversationId(data.conversationId);
     const citations = data.citations ?? [];
     setMessages((prev) =>
       prev.map((m) =>
@@ -180,7 +194,7 @@ export default function ChatPanel({
               id: Date.now(),
               role: 'assistant',
               text: data.answer,
-              citations,
+              citations: citations.length > 0 ? citations : undefined,
               responseTimeMs: data.responseTimeMs,
             }
           : m
@@ -188,6 +202,9 @@ export default function ChatPanel({
     );
     if (citations.length > 0) {
       onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+    }
+    if (isNew) {
+      onConversationCreated?.();
     }
   }
 
@@ -331,6 +348,11 @@ export default function ChatPanel({
 
       if (citations.length > 0) {
         onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+
+        // Step 7: Stream save-back (POST citations in background, never block answer, no error toast)
+        if (conversationIdRef.current) {
+          saveCitations(conversationIdRef.current, citations).catch(() => {});
+        }
       }
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -344,6 +366,9 @@ export default function ChatPanel({
         );
         if (citations && citations.length > 0) {
           onFeedUpdate?.({ chunks: citations, source: 'chat', query: question });
+          if (conversationIdRef.current) {
+            saveCitations(conversationIdRef.current, citations).catch(() => {});
+          }
         }
         return;
       }

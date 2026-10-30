@@ -109,3 +109,17 @@ export function createChatStream(payload, signal) {
     signal,
   });
 }
+
+// ── §3.9 — Chat conversations & history ───────────────────────────
+export function listConversations() {
+  return call(() => http.get('/api/v1/chat/conversations'));
+}
+
+export function getConversationMessages(id) {
+  return call(() => http.get(`/api/v1/chat/conversations/${id}/messages`));
+}
+
+export function saveCitations(id, citations) {
+  return call(() => http.post(`/api/v1/chat/conversations/${id}/citations`, citations));
+}
+

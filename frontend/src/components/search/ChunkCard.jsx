@@ -21,7 +21,12 @@ export function ChunkCard({ match, toast }) {
   const hasIndex = typeof match?.chunkIndex === 'number' && !isNaN(match.chunkIndex);
   const hasPage = typeof match?.pageNumber === 'number' && !isNaN(match.pageNumber);
   const hasScore = typeof match?.similarityScore === 'number' && !isNaN(match.similarityScore);
-  const scorePercent = hasScore ? Math.min(Math.max(Math.round(match.similarityScore * 100), 0), 100) : null;
+  const rawScore = hasScore
+    ? (match.similarityScore <= 1.0 && match.similarityScore >= -1.0
+        ? match.similarityScore * 100
+        : match.similarityScore)
+    : null;
+  const scorePercent = hasScore ? Math.min(Math.max(Math.round(rawScore), 0), 100) : null;
 
   async function handleCopy() {
     try {
@@ -59,7 +64,7 @@ export function ChunkCard({ match, toast }) {
                 <div className="similarity-bar-track">
                   <div
                     className="similarity-bar-fill"
-                    style={{ width: `${Math.min(Math.max(scorePercent, 0), 100)}%` }}
+                    style={{ width: `${scorePercent}%` }}
                   />
                 </div>
                 <span className="chunk-card__score">{scorePercent}%</span>
