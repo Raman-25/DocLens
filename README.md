@@ -23,9 +23,9 @@ Every answer carries **citations to the exact file, page, and chunk** it came fr
 
 ## 🎬 Demo
 
-> ▶️ **Demo video: coming soon** (link to be added)
+> ▶️ **Demo video:** [Watch the DocLens demo](https://youtu.be/cF0X7E4lcPw)
 <!-- TODO: replace the line above with a thumbnail that links to the video:
-[![DocLens demo](docs/screenshots/chat-citations.png)](YOUR_VIDEO_URL) -->
+[![DocLens demo](docs/screenshots/chat-citations.png)](https://youtu.be/cF0X7E4lcPw) -->
 
 **No live deployment by design:** it uses private AI keys, so it runs locally with your own (see [Quick Start](#-quick-start)).
 
@@ -324,3 +324,4 @@ memory consistency, citation integrity) are all backend, and that is where the w
 Built by [Raman-25](https://github.com/Raman-25)
 
 </div>
+
